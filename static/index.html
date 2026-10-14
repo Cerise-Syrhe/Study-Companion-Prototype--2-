@@ -1,0 +1,83 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>StudyCompanion</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root{--bg:#fafaf7;--fg:#1d1d1b;--mu:#6b6b66;--card:#fff;--bd:#e2e0d8;--ac:#2f6fed;--ok:#1f8a4c;--bad:#c93b3b}
+@media(prefers-color-scheme:dark){:root{--bg:#17181b;--fg:#ecebe6;--mu:#9a9990;--card:#212328;--bd:#33363d;--ac:#6c9bff;--ok:#4cc27d;--bad:#ef6b6b}}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,sans-serif}
+main{max-width:860px;margin:0 auto;padding:12px 14px 60px}h1{font-size:20px;margin:8px 0}h3{margin:14px 0 6px;font-size:15px}
+nav{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 14px}
+button,input,textarea,select{font:inherit;color:inherit}
+button{background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:6px 12px;cursor:pointer}
+button.on,button.p{background:var(--ac);color:#fff;border-color:var(--ac)}button:disabled{opacity:.5}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:12px;margin:8px 0}
+.c{padding:2px 8px;font-size:12px;margin:2px 4px 2px 0;border-radius:999px;color:var(--ac)}
+.mu{color:var(--mu);font-size:13px}.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+input[type=text],textarea{width:100%;box-sizing:border-box;background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:8px}
+.bar{height:8px;background:var(--bd);border-radius:4px;overflow:hidden}.bar i{display:block;height:100%;background:var(--ac)}
+.ok{border-left:3px solid var(--ok)}.no{border-left:3px solid var(--bad)}.warn{border-left:3px solid #d89b1a}
+.opt{display:block;width:100%;text-align:left;margin:5px 0}.sc{overflow-x:auto}
+#vw{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:2px solid var(--ac);padding:12px 16px;display:none;max-height:45%;overflow:auto}
+</style></head><body><main>
+<h1>📚 StudyCompanion <span class="mu">· student: <b id="who"></b></span></h1>
+<nav id="nav"></nav><div id="v"></div></main><div id="vw"></div>
+<script>
+const SAMPLE=`Slides|Slide 3|Supervised Learning|Supervised learning trains a model on labeled examples, mapping inputs to known outputs so it can predict labels for new data.
+Textbook|p. 12|Supervised Learning|Classification predicts discrete categories while regression predicts continuous numeric values; both are supervised tasks.
+Video|04:10|Linear Regression|Linear regression fits a line to data by minimizing the sum of squared residuals between predictions and targets.
+Slides|Slide 8|Linear Regression|The normal equation gives the least squares weights directly, but it becomes slow when there are many features.
+Video|12:45|Gradient Descent|Gradient descent iteratively updates parameters in the direction opposite the gradient of the loss to reduce error.
+Textbook|p. 47|Gradient Descent|The learning rate controls step size; a rate that is too large causes divergence while one too small makes convergence slow.
+Slides|Slide 9 (figure)|Gradient Descent|Figure caption extracted from image: contour plot of a loss surface showing successive gradient descent steps moving toward the minimum.
+Slides|Slide 15|Logistic Regression|Logistic regression applies the sigmoid function to a linear score to output a probability between zero and one for classification.
+Textbook|p. 61|Logistic Regression|Cross entropy loss penalizes confident wrong predictions and is the standard objective for logistic regression.
+Video|21:30|Overfitting|Overfitting happens when a model memorizes noise in the training set, giving low training error but high validation error.
+Slides|Slide 22|Overfitting|Cross validation splits data into folds to estimate generalization performance and detect overfitting early.
+Textbook|p. 88|Regularization|Regularization adds a penalty on weight magnitude to the loss, discouraging complex models and reducing variance.
+Video|30:05|Regularization|Lasso uses an L1 penalty that drives some weights exactly to zero, performing feature selection, while ridge uses an L2 penalty that shrinks weights smoothly.`;
+const $=id=>document.getElementById(id),esc=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const user=localStorage.getItem('sc_user')||(()=>{const n=prompt('Your name (keeps your progress separate):','me')||'me';localStorage.setItem('sc_user',n);return n})();
+$('who').textContent=user;
+let tab='lib',T=[],UN=[],chat=[],Q=null,err='';
+async function api(p,b){const r=await fetch(p,b?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}:{});if(!r.ok)throw new Error(await r.text());return r.json()}
+const chip=u=>`<button class="c" onclick="view(${u.unit_id||u.id})">${esc(u.kind)} · ${esc(u.loc)}</button>`;
+async function view(id){const u=await api('/units/'+id),w=$('vw');w.style.display='block';
+ w.innerHTML=`<div class="row"><b>${esc(u.kind)} · ${esc(u.loc)}</b><span class="mu">topic: ${esc(u.topic)} · from ${esc(u.source)}</span><button style="margin-left:auto" onclick="$('vw').style.display='none'">Close</button></div><p>${esc(u.text)}</p>`}
+async function load(){T=await api('/topics');UN=await api('/units');render()}
+async function seed(){await api('/sources/text',{kind:'Course',title:'ML 101 sample',text:SAMPLE});
+ await load()}
+async function addText(){const t=$('paste').value.trim();if(!t)return;await api('/sources/text',{kind:'Notes',title:'Pasted notes',text:t});await load()}
+async function upload(f){const fd=new FormData();fd.append('file',f);fd.append('kind','Notes');await fetch('/sources/file',{method:'POST',body:fd});await load()}
+async function send(){const q=$('q').value.trim();if(!q)return;chat.push({u:q});render();const a=await api('/ask',{user,query:q});chat.push({a});render()}
+async function startQ(diag){const sel=[...document.querySelectorAll('.tp:checked')].map(c=>c.value);
+ const l=await api('/quiz',{user,topics:sel.length?sel:null,n:+$('n').value,diagnostic:diag});Q={l,i:0,fb:null,res:[],rep:null};render()}
+async function answer(v){const q=Q.l[Q.i];const r=await api('/quiz/'+q.question_id+'/answer',{user,given:v});Q.fb={...r,given:v};Q.res.push({q,r,v});render()}
+async function nextQ(){Q.fb=null;Q.i++;if(Q.i>=Q.l.length)Q.rep=await api('/users/'+encodeURIComponent(user)+'/report');render()}
+const bars=m=>Object.keys(m).map(t=>`<div style="margin:6px 0"><div class="row"><span style="flex:1">${esc(t)}</span><span class="mu">${Math.round(m[t].p*100)}%</span></div><div class="bar"><i style="width:${m[t].p*100}%;${m[t].p<.5?'background:var(--bad)':''}"></i></div></div>`).join('');
+function graph(g,m){const id2={};g.nodes.forEach(n=>id2[n.id]=n);const pr={};g.edges.forEach(e=>(pr[e.to]=pr[e.to]||[]).push(e.from));
+ const d={},dep=i=>d[i]??(d[i]=1+Math.max(0,...(pr[i]||[]).map(dep)));g.nodes.forEach(n=>dep(n.id));
+ const L={},pos={};g.nodes.forEach(n=>(L[d[n.id]]=L[d[n.id]]||[]).push(n));let h=1;
+ Object.keys(L).forEach(k=>{L[k].forEach((n,i)=>pos[n.id]=[70+(k-1)*150,40+i*60]);h=Math.max(h,L[k].length)});
+ let s='';g.edges.forEach(e=>s+=`<line x1="${pos[e.from][0]+55}" y1="${pos[e.from][1]}" x2="${pos[e.to][0]-55}" y2="${pos[e.to][1]}" stroke="var(--mu)"/>`);
+ g.nodes.forEach(n=>{const p=(m[n.name]||{p:.3}).p,[x,y]=pos[n.id];s+=`<rect x="${x-55}" y="${y-18}" width="110" height="36" rx="8" fill="var(--card)" stroke="${p<.5?'var(--bad)':'var(--ok)'}" stroke-width="2"/><text x="${x}" y="${y-2}" text-anchor="middle" font-size="11" fill="var(--fg)">${esc(n.name.slice(0,16))}</text><text x="${x}" y="${y+12}" text-anchor="middle" font-size="10" fill="var(--mu)">${Math.round(p*100)}%</text>`});
+ const W=70+Object.keys(L).length*150;return`<div class="sc"><svg width="${W}" height="${40+h*60}">${s}</svg></div>`}
+async function render(){const N={lib:'Library',tutor:'Tutor',quiz:'Quiz',dash:'Dashboard'};
+ $('nav').innerHTML=Object.keys(N).map(k=>`<button class="${tab==k?'on':''}" onclick="tab='${k}';render()">${N[k]}</button>`).join('');let h='';
+ try{
+ if(tab=='lib'){h=`<div class="card"><b>Add sources</b><p class="mu">Upload or paste transcripts/notes. Use <code>Type|Location|Topic|text</code> lines to keep exact origins, or plain paragraphs for automatic topics.</p><textarea id="paste" rows="3"></textarea>
+ <div class="row" style="margin-top:6px"><button class="p" onclick="addText()">Ingest text</button><input type="file" accept=".txt,.srt,.vtt,.md" onchange="upload(this.files[0])">${T.length?'':'<button onclick="seed()">Load sample course</button>'}</div></div>`+
+ T.map(t=>`<div class="card"><b>${esc(t.name)}</b> <span class="mu">· ${t.units} units</span><div>${UN.filter(u=>u.topic==t.name).map(chip).join('')}</div></div>`).join('')}
+ if(tab=='tutor')h=`${chat.map(m=>m.u?`<div class="card" style="margin-left:40px">${esc(m.u)}</div>`:`<div class="card ${m.a.status=='grounded'?'ok':m.a.status=='partial'?'warn':'no'}"><b>${esc(m.a.note)}</b>${m.a.citations.map(c=>`<p>“${esc(c.excerpt)}” ${chip(c)}</p>`).join('')}</div>`).join('')||'<p class="mu">Ask about your uploaded material. Off-topic questions are declined.</p>'}
+ <div class="row"><input type="text" id="q" placeholder="Ask a question…" style="flex:1" onkeydown="if(event.key=='Enter')send()"><button class="p" onclick="send()">Ask</button></div>`;
+ if(tab=='quiz'){if(!Q)h=`<div class="card"><b>New quiz</b><p class="mu">First time? Take the diagnostic (one question per topic) to seed your mastery.</p><button class="p" onclick="startQ(true)">Take diagnostic</button><p>Or choose a scope:</p>
+  ${T.map(t=>`<label style="display:block"><input type="checkbox" class="tp" value="${esc(t.name)}"> ${esc(t.name)}</label>`).join('')}<div class="row" style="margin-top:8px">Questions <select id="n"><option>5</option><option>8</option><option>10</option></select><button class="p" onclick="startQ(false)">Start</button></div></div>`;
+  else if(Q.i>=Q.l.length){const sc=Q.res.filter(x=>x.r.correct).length,rp=Q.rep;h=`<div class="card"><b>Report: ${sc}/${Q.l.length}</b><h3>Mastery now</h3>${bars(rp.mastery)}<h3>Weak topics</h3>${rp.weak_topics.map(esc).join(', ')||'None 🎉'}<h3>Likely misconceptions</h3>${rp.misconceptions.map(x=>`<div class="mu">${esc(x.topic)}: answered “${esc(x.said)}” where the source says “${esc(x.source_says)}” <button class="c" onclick="view(${x.unit_id})">source</button></div>`).join('')||'<span class="mu">None detected.</span>'}<p><button class="p" onclick="Q=null;render()">New quiz</button></p></div>`}
+  else{const q=Q.l[Q.i];h=`<div class="card"><div class="mu">Q${Q.i+1}/${Q.l.length} · ${q.type=='mcq'?'MCQ':'Short answer'} · ${esc(q.topic)} · ${q.difficulty}</div><p>Fill in the blank: ${esc(q.prompt)}</p>`;
+   if(Q.fb)h+=`<div class="card ${Q.fb.correct?'ok':'no'}"><b>${Q.fb.correct?'Correct':'Not quite'}</b>: the answer is <b>${esc(Q.fb.answer)}</b>. Source: ${chip(Q.fb.citation)}</div><button class="p" onclick="nextQ()">${Q.i+1<Q.l.length?'Next':'See report'}</button>`;
+   else if(q.type=='mcq')h+=q.options.map((o,i)=>`<button class="opt" onclick="answer(Q.l[Q.i].options[${i}])">${esc(o)}</button>`).join('');
+   else h+=`<div class="row"><input type="text" id="sa" style="flex:1" onkeydown="if(event.key=='Enter')answer(this.value)"><button class="p" onclick="answer($('sa').value)">Submit</button></div>`;h+='</div>'}}
+ if(tab=='dash'){const [m,g]=await Promise.all([api('/users/'+encodeURIComponent(user)+'/mastery'),api('/graph')]);
+  h=`<div class="card"><b>Learner model</b> <span class="mu">· stored in the database, updated after every answer</span>${bars(m)}</div><div class="card"><b>Course flow map</b><p class="mu">Arrows run prerequisite → topic. Red = below 50% mastery.</p>${graph(g,m)}</div>`}
+ err=''}catch(e){err=e.message}
+ $('v').innerHTML=(err?`<div class="card no">Error: ${esc(err)}</div>`:'')+h}
+load();
+</script></body></html>
